@@ -1,11 +1,13 @@
 - Start server: `npm start`
 - You can find the mini-app at: https://universaleverything.io/0x0385a63d12eb9B9e76451B057d347A3B0fD088e7?network=testnet&assetGroup=grid
 - Frontend repo: [https://github.com/vigilvv/lemint-frontend-new](https://github.com/vigilvv/lemint-frontend-new)
+  - Frontend deployed to Netlify
 
 ![img](./assets/lemint-mini-app.png)
 
 - Smart contracts repo: [https://github.com/vigilvv/lemint-lukso-contracts](https://github.com/vigilvv/lemint-lukso-contracts)
 - Main entrypoint: `src/server.ts`
+- Backend deployed to AWS
 
 # LeMint Architecture and System Documentation
 

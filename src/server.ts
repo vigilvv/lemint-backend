@@ -27,10 +27,12 @@ app.use(bodyParser.json());
 // For production
 app.use(
   cors({
-    origin: [
-      "https://lemint.netlify.app",
-      "http://localhost:3000", // Your dev server
-    ],
+    // origin: [
+    //   "https://lemint.netlify.app",
+    //   "http://localhost:3000", // Your dev server
+    // ],
+    origin: "https://lemint.netlify.app",
+    methods: ["POST"], // Explicitly allow POST
   })
 );
 
