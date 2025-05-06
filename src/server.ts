@@ -21,8 +21,23 @@ app.use(express.json({ limit: "10mb" })); // Default is 100kb
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
 // Middleware
-app.use(cors());
+// app.use(cors());
 app.use(bodyParser.json());
+
+// For production
+app.use(
+  cors({
+    origin: [
+      "https://lemint.netlify.app",
+      "http://localhost:3000", // Your dev server
+    ],
+  })
+);
+
+// Or for development when working locally
+// app.use(cors({
+//   origin: ['https://www.vigilv.com', 'http://localhost:3000']
+// }));
 
 // Load environment variables
 const PRIVATE_KEY = process.env.ADMIN_PRIVATE_KEY;
