@@ -185,7 +185,8 @@ async function mintNFT(
     recipient, // to
     tokenIdBytes32, // tokenId
     true, // force
-    "0x" // data
+    "0x", // data
+    { gasLimit: 500000 } // Set appropriate gas limit
   );
   await mintTx.wait();
 
