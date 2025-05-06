@@ -109,4 +109,4 @@ The system consists of:
 3. Support music and video NFTs
 4. "New" section that displays all newly created NFTs
 5. Leaderboard
-6. "Collab" to allow remixing NFTs
+6. "Collab" to allow remixing NFTs≈
