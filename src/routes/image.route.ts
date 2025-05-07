@@ -1,11 +1,20 @@
 import express from "express";
 import { generateImage } from "../services/openai.service";
 import { uploadToIPFS } from "../services/pinata.service";
+import { SAMPLE_IMG } from "../sample_img";
 
 const router = express.Router();
 
 router.post("/generate-image", async (req, res): Promise<any> => {
   try {
+    // if (process.env.APP_ENV === "dev") {
+    //   res.json({
+    //     imageData: SAMPLE_IMG,
+    //   });
+    //   console.log("Returned sample image");
+    //   return;
+    // }
+
     const { prompt } = req.body;
 
     console.log("Prompt: ", prompt);
@@ -15,6 +24,7 @@ router.post("/generate-image", async (req, res): Promise<any> => {
     }
 
     const imageData = await generateImage(prompt);
+    // console.log(imageData);
     res.json({ imageData });
   } catch (error) {
     res.status(500).json({ error: "Failed to generate image" });

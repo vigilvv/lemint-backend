@@ -11,6 +11,8 @@ import imageRouter from "./routes/image.route";
 import { uploadMetadataToIPFS, uploadToIPFS } from "./services/pinata.service";
 import { ERC725 } from "@erc725/erc725.js";
 
+const statusMap = new Map<string, string>(); // for mint status polling
+
 dotenv.config();
 
 const app: Express = express();
@@ -31,7 +33,7 @@ app.use(
     //   "https://lemint.netlify.app",
     //   "http://localhost:3000", // Your dev server
     // ],
-    origin: "https://lemint.netlify.app",
+    origin: ["https://lemint.netlify.app", "http://localhost:5173"],
     methods: ["POST"], // Explicitly allow POST
   })
 );
@@ -65,62 +67,82 @@ interface MintRequest {
       value: string;
     }>;
   };
+  sessionId: string;
 }
 
 // Cache for deployed contract address
-let nftCollectionAddress: string | null = null;
-let nftCollectionContract: ethers.Contract | null = null;
+// let nftCollectionAddress: string | null = null;
+// let nftCollectionContract: ethers.Contract | null = null;
 
-async function deployNFTCollection(metadata: any): Promise<string> {
+async function deployNFTCollection(metadata: any): Promise<ethers.Contract> {
   const contractFactory = new ethers.ContractFactory(
     BasicNFTCollectionArtifacts.abi,
     BasicNFTCollectionArtifacts.bytecode,
     adminWallet
   );
 
-  const nftCollection = await contractFactory.deploy(
-    // "LeMint AI NFT Collection", // collection name
-    // "LMNFT", // collection symbol
-    metadata.name,
-    metadata.symbol,
-    adminWallet.address // contract owner
-  );
+  try {
+    const nftCollection = await contractFactory.deploy(
+      // "LeMint AI NFT Collection", // collection name
+      // "LMNFT", // collection symbol
+      metadata.name,
+      metadata.symbol,
+      adminWallet.address // contract owner
+    );
 
-  await nftCollection.waitForDeployment();
-  const address = await nftCollection.getAddress();
+    await nftCollection.waitForDeployment();
+    const address = await nftCollection.getAddress();
 
-  console.log("NFT Collection deployed to:", address);
-  return address;
-}
+    console.log("NFT Collection deployed to:", address);
+    // return address;
 
-async function getNFTCollectionContract(
-  metadata: any
-): Promise<ethers.Contract> {
-  if (nftCollectionAddress && nftCollectionContract) {
+    // In production - store this address in a database/config
+
+    const nftCollectionContract = new ethers.Contract(
+      address,
+      BasicNFTCollectionArtifacts.abi,
+      adminWallet
+    );
+
     return nftCollectionContract;
+  } catch (e) {
+    const error = e as Error;
+    throw new Error(error.message);
   }
-
-  // In production - store this address in a database/config
-  nftCollectionAddress = await deployNFTCollection(metadata);
-  nftCollectionContract = new ethers.Contract(
-    nftCollectionAddress,
-    BasicNFTCollectionArtifacts.abi,
-    adminWallet
-  );
-
-  return nftCollectionContract;
 }
+
+// async function getNFTCollectionContract(
+//   metadata: any
+// ): Promise<ethers.Contract> {
+//   if (nftCollectionAddress && nftCollectionContract) {
+//     return nftCollectionContract;
+//   }
+
+//   // In production - store this address in a database/config
+//   nftCollectionAddress = await deployNFTCollection(metadata);
+//   nftCollectionContract = new ethers.Contract(
+//     nftCollectionAddress,
+//     BasicNFTCollectionArtifacts.abi,
+//     adminWallet
+//   );
+
+//   return nftCollectionContract;
+// }
 
 async function mintNFT(
   recipient: string,
   tokenId: number,
-  metadata: any
+  metadata: any,
+  sessionId: string
 ): Promise<any> {
-  const contract = await getNFTCollectionContract(metadata);
+  // const contract = await getNFTCollectionContract(metadata);
+  statusMap.set(sessionId, "Deploying contract...");
+  const contract = await deployNFTCollection(metadata);
 
   // Convert tokenId to proper LSP8 format (bytes32)
   const tokenIdBytes32 = ethers.zeroPadValue(ethers.toBeHex(tokenId), 32);
 
+  statusMap.set(sessionId, "Uploading image to Pinata...");
   console.log("Uploading image to Pinata...");
   // Upload image to IPFS
   const imageFileName = `${metadata.name}-${Date.now()}.png`;
@@ -171,6 +193,7 @@ async function mintNFT(
     },
   };
 
+  statusMap.set(sessionId, "Uploading metadata to Pinata...");
   console.log("Uploading metadata to Pinata...");
   // Upload metadata to IPFS
   const metadataFileName = `${metadata.name}-metadata-${Date.now()}.json`;
@@ -179,6 +202,7 @@ async function mintNFT(
     metadataFileName
   );
 
+  statusMap.set(sessionId, "Minting NFT...");
   // Mint the NFT first
   console.log("Minting NFT...");
   const mintTx = await contract.mint(
@@ -222,6 +246,7 @@ async function mintNFT(
     },
   ]);
 
+  statusMap.set(sessionId, "Setting NFT metadata...");
   // Set the metadata for the token
   console.log("Setting token metadata...");
   const setDataTx = await contract.setDataForTokenId(
@@ -239,7 +264,8 @@ async function mintNFT(
   );
   await setDataTx1.wait();
 
-  console.log("Mint done");
+  statusMap.set(sessionId, "Mint success.");
+  console.log("Mint success.");
 
   return {
     success: true,
@@ -260,7 +286,13 @@ type MintRequestHandler = (
 // Explicitly type your route handler
 const mintHandler: MintRequestHandler = async (req, res) => {
   // const { recipientAddress, tokenId, metadata }: MintRequest = req.body;
-  const { recipientAddress, metadata }: MintRequest = req.body;
+  const { recipientAddress, metadata, sessionId }: MintRequest = req.body;
+
+  setTimeout(() => statusMap.delete(sessionId), 6 * 60 * 1000); // Auto-clean after 6 mins
+
+  statusMap.set(sessionId, "Starting...");
+
+  console.log("sessionId: ", sessionId);
 
   console.log("recipientAddress: ", recipientAddress);
   // console.log("metadata: ", metadata);
@@ -278,16 +310,20 @@ const mintHandler: MintRequestHandler = async (req, res) => {
 
   try {
     // const result = await mintNFT(recipientAddress, tokenId, metadata);
-    const result = await mintNFT(recipientAddress, 1, metadata);
+    const result = await mintNFT(recipientAddress, 1, metadata, sessionId);
     res.json({
       success: true,
       message: result,
-      contractAddress: nftCollectionAddress,
+      contractAddress: result.contractAddress,
       // tokenId,
       tokenId: 1,
     });
   } catch (error) {
     console.error("Minting error:", error);
+
+    // Delete sessionId on error
+    setTimeout(() => statusMap.delete(sessionId), 6 * 60 * 1000); // Auto-clean after 6 mins
+
     res.status(500).json({
       success: false,
       error: "Failed to mint NFT",
@@ -320,6 +356,14 @@ app.use("/api", imageRouter);
 // Start the server
 app.listen(port, () => {
   console.log(`Server running on http://localhost:${port}`);
+});
+
+app.get("/api/mint-status", (req, res): any => {
+  const sessionId = req.query.sessionId as string;
+  if (!sessionId || !statusMap.has(sessionId)) {
+    return res.status(404).json({ error: "No active session" });
+  }
+  return res.json({ status: statusMap.get(sessionId) });
 });
 
 // curl -X POST \
